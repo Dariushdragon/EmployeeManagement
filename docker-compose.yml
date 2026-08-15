@@ -1,0 +1,111 @@
+version: '3.9'
+
+services:
+  # ---------- Databases ----------
+  identity-db:
+    image: postgres:16
+    container_name: identity-db
+    environment:
+      POSTGRES_DB: identity_db
+      POSTGRES_USER: identity_user
+      POSTGRES_PASSWORD: identity_pass
+    ports:
+      - "5433:5432"
+    volumes:
+      - identity_data:/var/lib/postgresql/data
+    networks:
+      - restaurant-net
+
+  employee-db:
+    image: postgres:16
+    container_name: employee-db
+    environment:
+      POSTGRES_DB: employee_db
+      POSTGRES_USER: employee_user
+      POSTGRES_PASSWORD: employee_pass
+    ports:
+      - "5434:5432"
+    volumes:
+      - employee_data:/var/lib/postgresql/data
+    networks:
+      - restaurant-net
+
+  notification-db:
+    image: postgres:16
+    container_name: notification-db
+    environment:
+      POSTGRES_DB: notification_db
+      POSTGRES_USER: notification_user
+      POSTGRES_PASSWORD: notification_pass
+    ports:
+      - "5435:5432"
+    volumes:
+      - notification_data:/var/lib/postgresql/data
+    networks:
+      - restaurant-net
+
+  # ---------- Services ----------
+  identity-service:
+    build:
+      context: .
+      dockerfile: src/IdentityService/Dockerfile
+    container_name: identity-service
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Host=identity-db;Port=5432;Database=identity_db;Username=identity_user;Password=identity_pass
+      - ASPNETCORE_URLS=http://+:8080
+      - Grpc__Port=6001
+    ports:
+      - "5001:8080"
+      - "6001:6001"
+    depends_on:
+      - identity-db
+    networks:
+      - restaurant-net
+
+  employee-service:
+    build:
+      context: .
+      dockerfile: src/EmployeeService/Dockerfile
+    container_name: employee-service
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Host=employee-db;Port=5432;Database=employee_db;Username=employee_user;Password=employee_pass
+      - ASPNETCORE_URLS=http://+:8080
+      - Grpc__IdentityServiceAddress=http://identity-service:6001
+      - Grpc__NotificationServiceAddress=http://notification-service:6002
+    ports:
+      - "5002:8080"
+    depends_on:
+      - employee-db
+      - identity-service
+      - notification-service
+    networks:
+      - restaurant-net
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: src/NotificationService/Dockerfile
+    container_name: notification-service
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Host=notification-db;Port=5432;Database=notification_db;Username=notification_user;Password=notification_pass
+      - ASPNETCORE_URLS=http://+:8080
+      - Grpc__Port=6002
+    ports:
+      - "5003:8080"
+      - "6002:6002"
+    depends_on:
+      - notification-db
+    networks:
+      - restaurant-net
+
+networks:
+  restaurant-net:
+    driver: bridge
+
+volumes:
+  identity_data:
+  employee_data:
+  notification_data:
